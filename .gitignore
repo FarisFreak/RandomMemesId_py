@@ -1,0 +1,8 @@
+.python-version
+config.json
+session.json
+
+_queue/
+bot-env/
+logs/
+__pycache__/
