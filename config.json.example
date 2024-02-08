@@ -1,7 +1,14 @@
 {
-    "discord_token": "",
+    "discord" : {
+        "token" : "",
+        "guild_id" : 0,
+        "submit_channel_id" : 0,
+        "log_channel_id" : 0,
+        "queue_channel_id" : 0
+    },
     "instagram" : {
         "username" : "",
-        "password" : ""
+        "password" : ",
+        "caption" : ""
     }
 }
