@@ -4,6 +4,8 @@ import logging
 import json
 import requests
 import discord
+import ffmpeg
+import shutil
 from discord.ext import tasks
 from instagrapi import Client as IGClient
 from modules import Config, Media
@@ -26,6 +28,10 @@ class QueueManager :
         if os.path.isdir('_queue') == False:
             logging.info("[queuemanager] '_queue' folder does not exist. create new")
             os.makedirs('_queue')
+
+        if os.path.isdir('_queue/media') == False :
+            logging.info("[queuemanager] '_queue/media' folder does not exist. create new")
+            os.makedirs('_queue/media')
         
         try :
             with open('_queue/list.json') as f :
@@ -77,56 +83,68 @@ class QueueManager :
 class InstagramClient(IGClient) :
     def __init__(self) -> None:
         self.client = IGClient()
-        print('[instagram] init instagram client')
         if os.path.isfile('session.json'):
-            print('[instagram] session exist')
             self.client.load_settings('session.json')
         else :
-            print('[instagram] session does not exist')
             self.client.login(cfg_instagram['username'], cfg_instagram['password'])
             self.client.dump_settings('session.json')
     pass
 
     def upload_queue(self) :
-        print("upload queue")
         queue = QueueManager()
 
         proceed = False
 
         paths = []
         type = ''
+        id = ''
 
         if (queue.length() > 0) :
             q = queue.get_first(True)
+            id = q['id']
             medias = q['attachments']
             idx = 0
+            os.makedirs(f'_queue/media/{id}')
             for media in medias :
                 type = media['validate']['type']
                 if media['validate']['type'] == 'PHOTO':
                     idx += 1
-                    filename = f"_queue/{idx}_{q['id']}.jpg"
+                    filename = f"_queue/media/{id}/{idx}_{q['id']}.jpg"
                     media_response = requests.get(media['url'])
                     Image.open(BytesIO(media_response.content)).convert('RGB').save(filename)
                     paths.append(filename)
+                elif media['validate']['type'] == 'VIDEO' :
+                    idx += 1
+                    filename = f"_queue/media/{id}/{idx}_{q['id']}.mp4"
+                    filename_temp = f"_queue/media/{id}/_temp_{idx}_{q['id']}_{media['filename']}"
+                    media_response = requests.get(media['url'])
+                    with open(filename_temp, "wb") as f :
+                        f.write(media_response.content)
+
+                    ffmpeg.input(filename_temp).output(filename, loglevel="quiet").run(overwrite_output=True)
+
+                    paths.append(filename)
+                    
             proceed = True
 
+            
         if proceed :
-            response = None
-
+            print('[instagram] process queue')
             if (len(paths) > 1) : 
-                response = self.client.album_upload(paths, "demo")
+                response = self.client.album_upload(paths, cfg_instagram['caption'])
             elif (len(paths) == 1) :
                 if type == 'PHOTO' :
-                    response = self.client.photo_upload(paths[0], "demo")
+                    response = self.client.photo_upload(paths[0], cfg_instagram['caption'])
                 elif type == 'VIDEO' :
-                    response = self.client.video_upload(paths[0], "demo")
+                    response = self.client.video_upload(paths[0], cfg_instagram['caption'])
+            print('[instagram] process queue finished')
 
-            for path in paths :
-                os.remove(path)
+            shutil.rmtree(f'_queue/media/{id}', ignore_errors=True)
 
-            print(response)
-
-        return proceed
+        return {
+            "id" : id,
+            "status" : proceed
+        }
 
 
 # @tasks.loop(seconds=10)
@@ -138,15 +156,23 @@ class InstagramClient(IGClient) :
 #     logging.info("Hello world")
 
 class DiscordClient(discord.Client):
-    @tasks.loop(seconds=60)
+    # @tasks.loop(seconds=10)
     async def update_queue(self) :
         queue_channel = self.get_channel(cfg_discord['queue_channel_id'])
-        await queue_channel.edit(name=f"Queue : {QueueManager().load_information()['queue']}")
+        await queue_channel.edit(name=f"Queue : {QueueManager().length()}")
 
     @tasks.loop(seconds=5)
     async def upload_meme(self) :
         ig = InstagramClient()
-        ig.upload_queue()
+        result = ig.upload_queue()
+
+        if result['status'] :
+            submit_channel = self.get_channel(cfg_discord['submit_channel_id'])
+            message = await submit_channel.fetch_message(result['id'])
+            await message.clear_reactions()
+            await message.add_reaction('✅')
+
+            # await self.update_queue()
 
     async def on_connect(self):
         logging.info("[discord] bot connected")
