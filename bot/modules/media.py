@@ -7,8 +7,6 @@ MediaConfig = {
     "video/quicktime": "VIDEO"
 }
 
-Caption = "Check link in bio for submit your meme!\r\n#kamevid #memeindonesia #asupanmeme #memelucu #dagelanmeme #lawakan #videolucu #memeindo #freshmeme #awshitpostid #memeberkualitas #memevideoindonesia #memengakak #memeerpan1140 #memelawak #memekocak #wkwkwk #asupanmemeuseless #recehbanget #asupanmemebergizi #ngakak #ngakaksehat #erpan1140 #dagelanvideo #memelucubanget #shitpostindonesia #shitpostingindonesia #darkjokesindonesia #awreceh #hitzeedsamlekom"
-
 class Media : 
     def validate(attachment) :
         return {
