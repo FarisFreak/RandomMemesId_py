@@ -153,13 +153,14 @@ class DiscordClient(discord.Client):
 
     @tasks.loop(minutes=cfg_delay)
     async def upload_meme(self):
-        ig = InstagramClient()
-        result = ig.upload_queue()
-        if result['status']:
-            channel = self.get_channel(cfg_discord['submit_channel_id'])
-            msg = await channel.fetch_message(result['id'])
-            await msg.clear_reactions()
-            await msg.add_reaction('✅')
+        if (QueueManager().length() != 0):
+            ig = InstagramClient()
+            result = ig.upload_queue()
+            if result['status']:
+                channel = self.get_channel(cfg_discord['submit_channel_id'])
+                msg = await channel.fetch_message(result['id'])
+                await msg.clear_reactions()
+                await msg.add_reaction('✅')
 
     async def on_connect(self):
         logging.info("[Discord] Connected")
