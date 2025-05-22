@@ -170,7 +170,7 @@ class DiscordClient(discord.Client):
         logging.info("[Discord] Bot is ready")
         print(f'Logged in as {self.user}!')
         self.upload_meme.start()
-        self.update_queue()
+        await self.update_queue()
 
     async def on_message(self, message):
         if message.author.bot or message.author.id == self.user.id:
