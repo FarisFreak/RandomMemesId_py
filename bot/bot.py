@@ -125,7 +125,6 @@ class InstagramClient:
 
         item = self.queue.get_first(pop=True)
         id = item['id']
-        return {"id": id, "status": True}
         media_paths = []
         os.makedirs(f'_queue/media/{id}', exist_ok=True)
 
@@ -166,7 +165,7 @@ class DiscordClient(discord.Client):
         # await channel.edit(name=f"Queue : {self.queue.length()}")
         logging.info(f"[Discord] Updated queue : { _length }")
 
-    @tasks.loop(seconds=cfg_delay)
+    @tasks.loop(minutes=cfg_delay)
     async def upload_meme(self):
         if (self.queue.length() != 0):
             ig = InstagramClient(self.queue)
