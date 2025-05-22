@@ -11,5 +11,12 @@
         "password" : ",
         "caption" : ""
     },
-    "delay": 10
+    "delay": 10,
+    "mongodb": {
+        "host": "localhost",
+        "port": 27017,
+        "username": "",
+        "password": "",
+        "database": ""
+    }
 }
