@@ -183,7 +183,7 @@ class DiscordClient(discord.Client):
         self.upload_meme.start()
         await self.update_queue()
 
-    async def on_message(self, message):
+    async def on_message(self, message: discord.Message):
         if message.author.bot or message.author.id == self.user.id:
             return
         if message.guild.id != cfg_discord['guild_id'] or message.channel.id != cfg_discord['submit_channel_id']:
@@ -245,7 +245,7 @@ class DiscordClient(discord.Client):
 
         await message.add_reaction('🕒' if is_valid else '❌')
 
-    async def on_raw_message_delete(self, payload):
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
         self.queue.remove_by_id(payload)
         asyncio.create_task(self.update_queue())
 
