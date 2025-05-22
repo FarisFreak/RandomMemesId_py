@@ -149,6 +149,7 @@ class DiscordClient(discord.Client):
     async def update_queue(self):
         channel = self.get_channel(cfg_discord['queue_channel_id'])
         await channel.edit(name=f"Queue : {QueueManager().length()}")
+        logging.info(f"[Discord] Updated queue : {QueueManager().length()}")
 
     @tasks.loop(minutes=cfg_delay)
     async def upload_meme(self):
@@ -168,6 +169,7 @@ class DiscordClient(discord.Client):
         logging.info("[Discord] Bot is ready")
         print(f'Logged in as {self.user}!')
         self.upload_meme.start()
+        self.update_queue()
 
     async def on_message(self, message):
         if message.author.bot or message.author.id == self.user.id:
@@ -214,6 +216,7 @@ class DiscordClient(discord.Client):
                 "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             QueueManager().add(media_entry)
+            await self.update_queue()
 
         embed = discord.Embed(
             title="New Submission",
