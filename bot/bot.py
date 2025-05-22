@@ -159,10 +159,6 @@ class DiscordClient(discord.Client):
         await self.change_presence(activity=\
                                    discord.Activity(type=discord.ActivityType.watching, name="any meme submission 👀") if _length < 1 else \
                                     discord.Activity(type=discord.ActivityType.competing, name=f"Queue : {_length}"))
-        self.activity = discord.Activity(type=discord.ActivityType.watching, name=f"any meme submission 👀") if _length < 1 else\
-            discord.Activity(type=discord.ActivityType.competing, name=f"Queue : {_length}")
-        # channel = self.get_channel(cfg_discord['queue_channel_id'])
-        # await channel.edit(name=f"Queue : {self.queue.length()}")
         logging.info(f"[Discord] Updated queue : { _length }")
 
     @tasks.loop(minutes=cfg_delay)
