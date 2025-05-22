@@ -95,7 +95,7 @@ class InstagramClient:
             self.client.login(cfg_instagram['username'], cfg_instagram['password'])
             self.client.dump_settings(session_path)
 
-    def process_media(self, media, id, idx):
+    async def process_media(self, media, id, idx):
         url = media['url']
         media_type = media['validate']['type']
         filename_base = f"_queue/media/{id}/{idx}_{id}"
@@ -105,17 +105,20 @@ class InstagramClient:
             path = f"{filename_base}.jpg"
             Image.open(BytesIO(response.content)).convert('RGB').save(path)
         elif media_type == 'VIDEO':
-            temp_path = f"{filename_base}_temp_{media['filename']}"
             path = f"{filename_base}.mp4"
+            temp_path = f"{filename_base}_temp_{media['filename']}"
             with open(temp_path, 'wb') as f:
                 f.write(response.content)
-            ffmpeg.input(temp_path).output(path, loglevel="quiet").run(overwrite_output=True)
+
+            process = await asyncio.create_subprocess_exec('ffmpeg', '-i', path, '-loglevel', 'quiet', temp_path, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+            await process.communicate()
+            # ffmpeg.input(temp_path).output(path, loglevel="quiet").run(overwrite_output=True)
         else:
             return None
 
         return path
 
-    def upload_queue(self):
+    async def upload_queue(self):
         queue = QueueManager()
         if queue.length() == 0:
             return {"id": None, "status": False}
@@ -127,7 +130,7 @@ class InstagramClient:
 
         for idx, media in enumerate(item['attachments'], start=1):
             logging.info(f"[Instagram] Processing media: {media}")
-            path = self.process_media(media, id, idx)
+            path = await self.process_media(media, id, idx)
             if path:
                 media_paths.append(path)
 
@@ -155,7 +158,7 @@ class DiscordClient(discord.Client):
     async def upload_meme(self):
         if (QueueManager().length() != 0):
             ig = InstagramClient()
-            result = ig.upload_queue()
+            result = await ig.upload_queue()
             if result['status']:
                 channel = self.get_channel(cfg_discord['submit_channel_id'])
                 msg = await channel.fetch_message(result['id'])
