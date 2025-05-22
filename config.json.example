@@ -10,5 +10,6 @@
         "username" : "",
         "password" : ",
         "caption" : ""
-    }
+    },
+    "delay": 10
 }
