@@ -14,6 +14,8 @@ import ffmpeg
 import shutil
 import asyncio
 
+from pymongo import MongoClient
+
 from modules import Config, Media
 
 # Ensure logs folder exists
@@ -24,6 +26,7 @@ cf = Config().load()
 cfg_discord = cf['discord']
 cfg_instagram = cf['instagram']
 cfg_delay = cf['delay']
+cfg_mongo = cf['mongodb']
 
 # Setup logging
 LOG_FILE = f"logs/{datetime.datetime.now().strftime('%Y-%m-%d_T%H-%M-%S')}.log"
@@ -33,61 +36,49 @@ logging.basicConfig(filename=LOG_FILE, filemode="w", format="%(asctime)s %(level
 class QueueManager:
     def __init__(self):
         logging.info("[QueueManager] Initializing queue")
+        logging.info("[QueueManager] Loading MongoDB configuration")
+        logging.getLogger("pymongo").setLevel(logging.WARNING)
+        self._db_username = cfg_mongo['username']
+        self._db_password = cfg_mongo['password']
+        self._db_host = cfg_mongo['host']
+        self._db_port = cfg_mongo['port']
+        self._db_name = cfg_mongo['database']
+
+        self._db_client = MongoClient(f"mongodb://{self._db_username}:{self._db_password}@{self._db_host}:{self._db_port}/{self._db_name}?authSource={self._db_name}")
+        self._db = self._db_client[self._db_name]
+
+        self._data = self._db['queue']
+
+        # ------
+
         self.queue_dir = Path('_queue')
         self.media_dir = self.queue_dir / 'media'
-        self.queue_file = self.queue_dir / 'list.json'
 
         self.queue_dir.mkdir(exist_ok=True)
         self.media_dir.mkdir(exist_ok=True)
-        self.queue = self.load_queue()
-
-    def load_queue(self):
-        if self.queue_file.exists():
-            try:
-                with open(self.queue_file) as f:
-                    logging.info("[QueueManager] Loading existing queue")
-                    return json.load(f)
-            except Exception as e:
-                logging.error(f"[QueueManager] Failed to load queue: {e}")
-        return []
-
-    def save(self):
-        with open(self.queue_file, 'w') as f:
-            json.dump(self.queue, f)
-        logging.info("[QueueManager] Queue saved")
 
     def add(self, data):
         logging.info("[QueueManager] Adding item to queue")
-        self.queue.append(data)
-        self.save()
+        self._data.insert_one(data)
 
     def get_first(self, pop=False):
-        if not self.queue:
-            return None
-        item = self.queue.pop(0) if pop else self.queue[0]
-        logging.info(f"[QueueManager] Retrieved item: {item}")
-        if pop:
-            self.save()
+        logging.info("[QueueManager] Retrieving first item from queue")
+        
+        item = self._data.find_one_and_delete({}, sort=[('_id', 1)]) if pop else self._data.find_one(sort=[('_id', 1)])
+        logging.info(f"[QueueManager] Retrieved item{' and pop' if pop else '' }: {item}")
         return item
 
     def remove_by_id(self, message):
         logging.info("[QueueManager] Removing item by ID")
-        self.queue = [q for q in self.queue if q["id"] != message.message_id]
-        self.save()
+        self._data.delete_one({"id": message.message_id})
 
     def length(self):
-        return len(self.queue)
-
-    def raw(self):
-        return self.queue
-
-    def info(self):
-        return {"queue": len(self.queue)}
-
+        return self._data.count_documents({})
 
 class InstagramClient:
-    def __init__(self):
+    def __init__(self, queue : QueueManager):
         self.client = IGClient()
+        self.queue = queue
         session_path = Path('session.json')
         if session_path.exists():
             self.client.load_settings(session_path)
@@ -110,8 +101,18 @@ class InstagramClient:
             with open(temp_path, 'wb') as f:
                 f.write(response.content)
 
-            process = await asyncio.create_subprocess_exec('ffmpeg', '-i', path, '-loglevel', 'quiet', temp_path, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-            await process.communicate()
+            process = await asyncio.create_subprocess_exec(
+                'ffmpeg', '-i', temp_path, path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            if process.returncode != 0:
+                logging.info(f"[Instagram] FFmpeg failed: {stderr.decode()}")
+            else:
+                logging.info("[Instagram] FFmpeg finished successfully.")
+
             # ffmpeg.input(temp_path).output(path, loglevel="quiet").run(overwrite_output=True)
         else:
             return None
@@ -119,12 +120,12 @@ class InstagramClient:
         return path
 
     async def upload_queue(self):
-        queue = QueueManager()
-        if queue.length() == 0:
+        if self.queue.length() == 0:
             return {"id": None, "status": False}
 
-        item = queue.get_first(pop=True)
+        item = self.queue.get_first(pop=True)
         id = item['id']
+        return {"id": id, "status": True}
         media_paths = []
         os.makedirs(f'_queue/media/{id}', exist_ok=True)
 
@@ -149,21 +150,33 @@ class InstagramClient:
 
 
 class DiscordClient(discord.Client):
-    async def update_queue(self):
-        channel = self.get_channel(cfg_discord['queue_channel_id'])
-        await channel.edit(name=f"Queue : {QueueManager().length()}")
-        logging.info(f"[Discord] Updated queue : {QueueManager().length()}")
+    def __init__(self, *, intents: discord.Intents, queue: QueueManager, **kwargs):
+        logging.info("[DiscordClient] Initializing Discord client")
+        super().__init__(intents=intents, **kwargs)
+        self.queue = queue
 
-    @tasks.loop(minutes=cfg_delay)
+    async def update_queue(self):
+        _length = self.queue.length()
+        await self.change_presence(activity=\
+                                   discord.Activity(type=discord.ActivityType.watching, name="any meme submission 👀") if _length < 1 else \
+                                    discord.Activity(type=discord.ActivityType.competing, name=f"Queue : {_length}"))
+        self.activity = discord.Activity(type=discord.ActivityType.watching, name=f"any meme submission 👀") if _length < 1 else\
+            discord.Activity(type=discord.ActivityType.competing, name=f"Queue : {_length}")
+        # channel = self.get_channel(cfg_discord['queue_channel_id'])
+        # await channel.edit(name=f"Queue : {self.queue.length()}")
+        logging.info(f"[Discord] Updated queue : { _length }")
+
+    @tasks.loop(seconds=cfg_delay)
     async def upload_meme(self):
-        if (QueueManager().length() != 0):
-            ig = InstagramClient()
+        if (self.queue.length() != 0):
+            ig = InstagramClient(self.queue)
             result = await ig.upload_queue()
-            if result['status']:
-                channel = self.get_channel(cfg_discord['submit_channel_id'])
-                msg = await channel.fetch_message(result['id'])
-                await msg.clear_reactions()
-                await msg.add_reaction('✅')
+
+            channel = self.get_channel(cfg_discord['submit_channel_id'])
+            msg = await channel.fetch_message(result['id'])
+            await msg.clear_reactions()
+            await msg.add_reaction('✅' if result['status'] else '❌')
+            await self.update_queue()
 
     async def on_connect(self):
         logging.info("[Discord] Connected")
@@ -218,7 +231,7 @@ class DiscordClient(discord.Client):
                 "attachments": attachments_data,
                 "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
-            QueueManager().add(media_entry)
+            self.queue.add(media_entry)
             await self.update_queue()
 
         if (cfg_discord['log_channel_id'] is not None) or (cfg_discord['log_channel_id'] != 0):
@@ -233,19 +246,21 @@ class DiscordClient(discord.Client):
             .add_field(name="Attachments", value=len(message.attachments))\
             .set_footer(text=f"ID : {message.id}")
 
-            await log_channel.send(embed=embed, files=files_to_embed)
+            asyncio.create_task(log_channel.send(embed=embed, files=files_to_embed))
 
         await message.add_reaction('🕒' if is_valid else '❌')
 
     async def on_raw_message_delete(self, payload):
-        QueueManager().remove_by_id(payload)
+        self.queue.remove_by_id(payload)
+        asyncio.create_task(self.update_queue())
 
 
 def main():
     intents = discord.Intents.default()
     intents.message_content = True
+    queue = QueueManager()
 
-    client = DiscordClient(intents=intents)
+    client = DiscordClient(intents=intents, queue=queue)
     try:
         client.run(cfg_discord['token'])
     except KeyboardInterrupt:
