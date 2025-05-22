@@ -178,7 +178,6 @@ class DiscordClient(discord.Client):
             return
 
         logging.info("[Discord] New submission received")
-        log_channel = self.get_channel(cfg_discord['log_channel_id'])
 
         if not message.attachments:
             await message.delete()
@@ -218,17 +217,20 @@ class DiscordClient(discord.Client):
             QueueManager().add(media_entry)
             await self.update_queue()
 
-        embed = discord.Embed(
-            title="New Submission",
-            description=f"Submission from {message.author.mention}",
-            color=0x00ff00,
-            timestamp=datetime.datetime.now()
-        ).add_field(name="ID", value=message.id)\
-         .add_field(name="Author", value=message.author.mention)\
-         .add_field(name="Attachments", value=len(message.attachments))\
-         .set_footer(text=f"ID : {message.id}")
+        if (cfg_discord['log_channel_id'] is not None) or (cfg_discord['log_channel_id'] != 0):
+            log_channel = self.get_channel(cfg_discord['log_channel_id'])
+            embed = discord.Embed(
+                title="New Submission",
+                description=f"Submission from {message.author.mention}",
+                color=0x00ff00,
+                timestamp=datetime.datetime.now()
+            ).add_field(name="ID", value=message.id)\
+            .add_field(name="Author", value=message.author.mention)\
+            .add_field(name="Attachments", value=len(message.attachments))\
+            .set_footer(text=f"ID : {message.id}")
 
-        await log_channel.send(embed=embed, files=files_to_embed)
+            await log_channel.send(embed=embed, files=files_to_embed)
+
         await message.add_reaction('🕒' if is_valid else '❌')
 
     async def on_raw_message_delete(self, payload):
