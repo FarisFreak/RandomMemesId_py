@@ -8,6 +8,7 @@ colorama==0.4.6
 decorator==4.4.2
 discord.py==2.3.2
 distlib==0.3.8
+dnspython==2.7.0
 ffmpeg-python==0.2.0
 filelock==3.13.1
 frozenlist==1.4.1
@@ -26,6 +27,7 @@ proglog==0.1.10
 pycryptodomex==3.20.0
 pydantic==2.5.3
 pydantic_core==2.14.6
+pymongo==4.13.0
 PySocks==1.7.1
 requests==2.31.0
 setuptools==69.0.3
