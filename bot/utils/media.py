@@ -7,9 +7,11 @@ MediaConfig = {
     "video/quicktime": "VIDEO"
 }
 
-class Media : 
-    def validate(attachment) :
+class Media:
+    @staticmethod
+    def validate(attachment) -> dict:
+        media_type = MediaConfig.get(attachment.content_type)
         return {
-            "status" : attachment.content_type in MediaConfig,
-            "type" : MediaConfig.get(attachment.content_type)
+            "status": media_type is not None,
+            "type": media_type
         }
