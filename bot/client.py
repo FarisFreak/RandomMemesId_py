@@ -94,7 +94,8 @@ class DiscordClient(discord.Client):
                 "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "status": "pending",
                 "priority": 0,
-                "stop": False
+                "stop": False,
+                "error": None
             }
             self.queue.add(media_entry)
             await self.update_queue()
@@ -116,5 +117,9 @@ class DiscordClient(discord.Client):
         await message.add_reaction('🕒' if is_valid else '❌')
 
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
-        self.queue.remove_by_id(payload)
+        if payload.guild_id != int(self._config_discord['guild_id']):
+            return
+        if payload.channel_id != int(self._config_discord['submit_channel_id']):
+            return
+        self.queue.remove_by_id(payload.message_id)
         asyncio.create_task(self.update_queue())

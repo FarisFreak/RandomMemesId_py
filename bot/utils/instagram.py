@@ -62,7 +62,7 @@ class InstagramClient:
         if self.queue.length() == 0:
             return {"id": None, "status": False}
 
-        item = self.queue.get_first(pop=True)
+        item = self.queue.get_first()
 
         try:
             self.queue.update_status(item['id'], 'processing')
@@ -96,6 +96,6 @@ class InstagramClient:
         except Exception as e:
             # Handle the exception
             logging.error(f"[Instagram] Processing media: {e}")
-            self.queue.update_status(id, 'failed')
-            self.queue.stop_queue(id)
+            self.queue.update_error(id, str(e))
+            self.queue.stop_by_id(id)
             return {"id": id, "status": False}
