@@ -59,16 +59,18 @@ class InstagramClient:
         return path
 
     async def upload_queue(self):
-        if self.queue.length() == 0:
+        if await self.queue.length() == 0:
             return {"id": None, "status": False}
 
-        item = self.queue.get_first()
+        item = await self.queue.get_first()
 
         try:
-            self.queue.update_status(item['id'], 'processing')
+            await self.queue.update_status(item['id'], 'processing')
             id = item['id']
             media_paths = []
-            os.makedirs(f'_queue/media/{id}', exist_ok=True)
+
+            _path = f'_queue/media/{id}'
+            os.makedirs(_path, exist_ok=True)
 
             for idx, media in enumerate(item['attachments'], start=1):
                 logging.info(f"[Instagram] Processing media: {media}")
@@ -79,7 +81,7 @@ class InstagramClient:
             if not media_paths:
                 return {"id": id, "status": False}
 
-            self.queue.update_status(id, 'uploading')
+            await self.queue.update_status(id, 'uploading')
             if len(media_paths) > 1:
                 self.client.album_upload(media_paths, self._config['caption'])
             elif media['validate']['type'] == 'PHOTO':
@@ -87,15 +89,15 @@ class InstagramClient:
             elif media['validate']['type'] == 'VIDEO':
                 self.client.video_upload(media_paths[0], self._config['caption'])
 
-            shutil.rmtree(f'_queue/media/{id}', ignore_errors=True)
+            shutil.rmtree(_path, ignore_errors=True)
 
-            self.queue.update_status(id, 'uploaded')
+            await self.queue.update_status(id, 'uploaded')
             logging.info(f"[Instagram] Media with ID {id} processed successfully.")
-            self.queue.remove_by_id(id)
+            await self.queue.remove_by_id(id)
             return {"id": id, "status": True}
         except Exception as e:
             # Handle the exception
             logging.error(f"[Instagram] Processing media: {e}")
-            self.queue.update_error(id, str(e))
-            self.queue.stop_by_id(id)
+            await self.queue.update_error(id, str(e))
+            await self.queue.stop_by_id(id)
             return {"id": id, "status": False}

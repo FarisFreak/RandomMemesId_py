@@ -22,7 +22,7 @@ class DiscordClient(discord.Client):
         self.upload_meme.change_interval(minutes=self._config_delay)
 
     async def update_queue(self):
-        _length = self.queue.length()
+        _length = await self.queue.length()
         await self.change_presence(activity=\
                                    discord.Activity(type=discord.ActivityType.watching, name="any meme submission 👀") if _length < 1 else \
                                     discord.Activity(type=discord.ActivityType.competing, name=f"Queue : {_length}"))
@@ -30,7 +30,7 @@ class DiscordClient(discord.Client):
 
     @tasks.loop(minutes=60)
     async def upload_meme(self):
-        if (self.queue.length() != 0):
+        if (await self.queue.length() != 0):
             ig = InstagramClient(self.queue)
             result = await ig.upload_queue()
 
@@ -97,7 +97,7 @@ class DiscordClient(discord.Client):
                 "stop": False,
                 "error": None
             }
-            self.queue.add(media_entry)
+            await self.queue.add(media_entry)
             await self.update_queue()
 
         if (self._config_discord['log_channel_id'] is not None) or (self._config_discord['log_channel_id'] != 0):
@@ -117,9 +117,17 @@ class DiscordClient(discord.Client):
         await message.add_reaction('🕒' if is_valid else '❌')
 
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
-        if payload.guild_id != int(self._config_discord['guild_id']):
-            return
-        if payload.channel_id != int(self._config_discord['submit_channel_id']):
-            return
-        self.queue.remove_by_id(payload.message_id)
-        asyncio.create_task(self.update_queue())
+        try:
+            if payload.guild_id != int(self._config_discord['guild_id']):
+                return
+            if payload.channel_id != int(self._config_discord['submit_channel_id']):
+                return
+            
+            logging.info(f"[Discord] Message deleted: {payload.message_id}")
+            await self.queue.remove_by_id(payload.message_id)
+            asyncio.create_task(self.update_queue())
+        except Exception as e:
+            logging.error(f"[Discord] Error handling message delete: {e}")
+            await self.queue.update_error(payload.message_id, str(e))
+            await self.queue.stop_queue(payload.message_id)
+            asyncio.create_task(self.update_queue())

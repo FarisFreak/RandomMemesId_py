@@ -17,6 +17,7 @@ idna==3.6
 imageio==2.33.1
 imageio-ffmpeg==0.4.9
 instagrapi==2.0.3
+motor==3.7.1
 moviepy==1.0.3
 multidict==6.0.5
 numpy==1.26.4
