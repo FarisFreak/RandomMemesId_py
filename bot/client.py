@@ -28,7 +28,7 @@ class DiscordClient(discord.Client):
                                     discord.Activity(type=discord.ActivityType.competing, name=f"Queue : {_length}"))
         logging.info(f"[Discord] Updated queue : { _length }")
 
-    async def _delay_until_next_hour():
+    async def _delay_until_next_hour(self):
         now = datetime.datetime.now()
         next_hour = (now + datetime.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         delay = (next_hour - now).total_seconds()
