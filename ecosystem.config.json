@@ -1,0 +1,9 @@
+{
+    "apps": [
+      {
+        "name": "RandomMemesId",
+        "script": "main.py",
+        "interpreter": "/home/faris/RandomMemesId_py/.venv/bin/python"
+      }
+    ]
+}  
