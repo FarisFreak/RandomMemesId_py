@@ -99,5 +99,5 @@ class InstagramClient:
             # Handle the exception
             logging.error(f"[Instagram] Processing media: {e}")
             await self.queue.update_error(id, str(e))
-            await self.queue.stop_by_id(id)
+            await self.queue.stop_queue(id)
             return {"id": id, "status": False}
