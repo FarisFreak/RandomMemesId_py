@@ -28,6 +28,21 @@ class DiscordClient(discord.Client):
                                     discord.Activity(type=discord.ActivityType.competing, name=f"Queue : {_length}"))
         logging.info(f"[Discord] Updated queue : { _length }")
 
+    async def _delay_until_next_hour():
+        now = datetime.datetime.now()
+        next_hour = (now + datetime.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        delay = (next_hour - now).total_seconds()
+        logging.info(f"[Discord] Waiting for {delay / 60:.2f} minutes until next hour")
+        await asyncio.sleep(delay)
+
+    async def _start_upload_meme(self):
+        await self._delay_until_next_hour()
+        if (self.upload_meme.is_running()):
+            logging.info("[Discord] Upload meme task is already running")
+            return
+        logging.info("[Discord] Starting upload meme task")
+        self.upload_meme.start()
+
     @tasks.loop(minutes=60)
     async def upload_meme(self):
         if (await self.queue.length() != 0):
@@ -47,7 +62,7 @@ class DiscordClient(discord.Client):
     async def on_ready(self):
         logging.info("[Discord] Bot is ready")
         print(f'Logged in as {self.user}!')
-        self.upload_meme.start()
+        asyncio.create_task(self._start_upload_meme())
         await self.update_queue()
 
     async def on_message(self, message: discord.Message):
