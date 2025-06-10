@@ -1,3 +1,5 @@
+import discord
+
 MediaConfig = {
     "image/jpeg": "PHOTO",
     "image/png": "PHOTO",
@@ -9,7 +11,7 @@ MediaConfig = {
 
 class Media:
     @staticmethod
-    def validate(attachment) -> dict:
+    def validate(attachment: discord.Attachment) -> dict:
         media_type = MediaConfig.get(attachment.content_type)
         return {
             "status": media_type is not None,
