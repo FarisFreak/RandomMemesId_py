@@ -1,0 +1,19 @@
+{
+    "bot": {
+        "token" : "",
+        "guild_id" : 0,
+        "submit_channel_id" : 0,
+        "log_channel_id" : 0,
+        "queue_channel_id" : 0
+    },
+    "worker": {
+        "username" : "",
+        "password" : "",
+        "caption" : "",
+        "delay": 60
+    },
+    "mongodb":{
+        "uri": "",
+        "db_name": ""
+    }
+}
