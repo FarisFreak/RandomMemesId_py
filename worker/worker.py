@@ -78,7 +78,7 @@ class WorkerClient:
                 logging.info("Empty queue")
                 return False
 
-            base_path = f'../.queue/media/{item["id"]}'
+            base_path = f'../.queue/media/{item['id']}'
             converted_medias = []
             _media_type = 'PHOTO'
 
@@ -96,10 +96,10 @@ class WorkerClient:
                     raise e
                 
             if not converted_medias:
-                raise ValueError(f"Unknown error {item["id"]} (empty media)")
+                raise ValueError(f"Unknown error {item['id']} (empty media)")
             
-            logging.info(f"Uploading queue {item["id"]}..")
-            await self._update_queue_status(item_id=item["id"], status="uploading")
+            logging.info(f"Uploading queue {item['id']}..")
+            await self._update_queue_status(item_id=item['id'], status="uploading")
             
             if len(converted_medias) > 1:
                 self.client.album_upload(converted_medias, self._caption)
@@ -108,13 +108,13 @@ class WorkerClient:
             elif _media_type == 'VIDEO':
                 self.client.video_upload(converted_medias[0], self._caption)
 
-            logging.info(f"Queue ID {item["id"]} successfully processed.")
-            await self._update_queue_status(item["id"], "success")
+            logging.info(f"Queue ID {item['id']} successfully processed.")
+            await self._update_queue_status(item['id'], "success")
             self._cleanup_media(base_path)
             return True
 
         except Exception as e:
-            await self._handle_processing_failure(item_id=item["id"], error=e)
+            await self._handle_processing_failure(item_id=item['id'], error=e)
             logging.error(f"Unexpected error while processing queue: {e}")
             return False
 
