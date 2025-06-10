@@ -49,13 +49,19 @@ _collections = _db['queue']
 
 
 class BotClient(discord.Client):
+    def __init__(self, *, intents: discord.Intents, **kwargs):
+        super().__init__(intents=intents, **kwargs)
+        self._prev_queue = -1
+
     async def on_ready(self):
         logging.info(f'Logged on as {self.user}')
-        asyncio.create_task(self._poll_status_changes())  # Mulai memantau perubahan status
+        asyncio.create_task(self._poll_status_changes())
+        asyncio.create_task(self._update_queue())
 
     async def on_message(self, message: discord.Message):
         """Handle incoming messages."""
         if self._should_ignore_message(message):
+            await self._handle_invalid_message(message)
             return
 
         logging.info(f"Processing message from {message.author.name} (ID: {message.id})")
@@ -188,7 +194,8 @@ class BotClient(discord.Client):
             "priority": 0,
             "stop": stop,
             "error": errors,
-            "reacted": False
+            "reacted": False,
+            "updated_at": None
         }
 
     def _create_media_directory(self, message_id: int) -> str:
@@ -239,6 +246,32 @@ class BotClient(discord.Client):
             logging.info(f"Successfully deleted message ID {message_id} from MongoDB")
         else:
             logging.warning(f"Message ID {message_id} not found in MongoDB")
+
+    async def _update_queue(self):
+        """Update for queue length."""
+
+        while True:
+            try:
+                query = {
+                    "status": "pending",
+                    "stop": False
+                }
+                
+                results = await _collections.find(query).to_list(length=None)
+                current_queue_length = len(results)
+
+                if current_queue_length != self._prev_queue:
+                    logging.info(f"Updated queue length: {current_queue_length}")
+                    self._prev_queue = current_queue_length
+
+                    await self.change_presence(activity=\
+                                    discord.Activity(type=discord.ActivityType.watching, name="any meme submission 👀") if current_queue_length < 1 else \
+                                        discord.Activity(type=discord.ActivityType.competing, name=f"Queue : {current_queue_length}"))
+
+            except Exception as e:
+                logging.error(f"Error while updating queue: {e}")
+
+            await asyncio.sleep(5)
 
     async def _poll_status_changes(self):
         """Poll for changes in the 'status' field where 'reacted' is false."""
