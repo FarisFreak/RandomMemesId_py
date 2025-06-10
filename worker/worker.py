@@ -3,6 +3,7 @@ import os
 import logging
 import asyncio
 import shutil
+import datetime
 from PIL import Image
 from io import BytesIO
 from pathlib import Path
@@ -49,6 +50,7 @@ except Exception as e:
 
 _collections = _db['queue']
 
+TIMESTAMP_FILE = "../config/initial_run_time.json"
 
 class WorkerClient:
     def __init__(self):
@@ -66,7 +68,7 @@ class WorkerClient:
 
         self._caption = _worker_config['caption'] or '#fyp'
 
-        logging.info("Worker started.")
+        logging.info("Worker ready.")
 
     async def upload_media(self) -> bool:
         """Process and upload media from the queue."""
@@ -161,13 +163,27 @@ class WorkerClient:
         logging.error(f"Failed to process media for queue ID {item_id}: {error}")
         await _collections.update_one(
             {"id": item_id},
-            {"$set": {"status": "failed", "stop": True, "error": [str(error)]}}
+            {"$set": { 
+                "status": "failed", 
+                "stop": True, 
+                "error": [str(error)],
+                "updated_at": datetime.datetime.now()
+                }
+            }
         )
 
     async def _update_queue_status(self, item_id: int, status: str):
         """Update the status of a queue item in MongoDB."""
         logging.info(f"Updating queue ID {item_id} status to '{status}'")
-        await _collections.update_one({"id": item_id}, {"$set": {"status": status, "reacted": False}})
+        await _collections.update_one(
+            {"id": item_id}, 
+            {"$set": {
+                "status": status, 
+                "reacted": False,
+                "updated_at": datetime.datetime.now()
+                }
+            }
+        )
 
     def _cleanup_media(self, base_path: str):
         """Clean up media files after processing."""
@@ -175,11 +191,30 @@ class WorkerClient:
         if os.path.exists(base_path):
             shutil.rmtree(base_path)
 
+def _delay_until_next_hour() -> datetime.datetime:
+    now = datetime.datetime.now()
+    next_hour = (now + datetime.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    logging.info(f"First run at {next_hour}")
+    return next_hour
+
+def save_initial_run_time(now: datetime.datetime, next_hour: datetime.datetime):
+    initial_run_time = now.isoformat()
+    next_run_time = next_hour.isoformat()
+    os.makedirs(os.path.dirname(TIMESTAMP_FILE), exist_ok=True)
+    with open(TIMESTAMP_FILE, "w") as f:
+        json.dump({"initial_run_time": initial_run_time, "next_run_time": next_run_time}, f)
+    logging.info("Initial run time saved to file")
+
 async def main():
     worker = WorkerClient()
 
+    _run_timestamp = datetime.datetime.now()
+    _delay_next_hour_timestamp = _delay_until_next_hour()
+
+    save_initial_run_time(_run_timestamp, _delay_next_hour_timestamp)
+
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(worker.upload_media, 'interval', minutes=int(_worker_config['delay']) or 60)
+    scheduler.add_job(worker.upload_media, 'interval', minutes=int(_worker_config['delay']) or 60, next_run_time=_delay_next_hour_timestamp)
 
     logging.info("Starting scheduler...")
     scheduler.start()
