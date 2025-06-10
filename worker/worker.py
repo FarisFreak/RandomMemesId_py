@@ -78,7 +78,7 @@ class WorkerClient:
                 logging.info("Empty queue")
                 return False
 
-            base_path = f'../.queue/media/{item['id']}'
+            base_path = f"../.queue/media/{item['id']}"
             converted_medias = []
             _media_type = 'PHOTO'
 
