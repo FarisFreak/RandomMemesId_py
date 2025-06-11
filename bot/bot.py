@@ -66,8 +66,7 @@ class BotClient(discord.Client):
         
         logging.info(f"Processing message from {message.author.name} (ID: {message.id})")
 
-        if not message.attachments:
-            logging.info(f"Empty attachment {message.id}")
+        if not self._is_valid_message(message):
             await self._handle_invalid_message(message)
             return
 
@@ -89,6 +88,18 @@ class BotClient(discord.Client):
         await self._handle_message_deletion(payload.message_id)
 
     # === Helper Methods ===
+
+    def _is_valid_message(self, message: discord.Message) -> bool:
+        """Check if the message meets validity conditions."""
+        if not message.attachments:
+            logging.info(f"Empty attachment in message ID: {message.id}")
+            return False
+
+        if len(message.attachments) > 10:
+            logging.info(f"Attachments exceed limit of 10 in message ID: {message.id}")
+            return False
+
+        return True
 
     def _should_ignore_raw_message(self, payload: discord.RawMessageDeleteEvent) -> bool:
         """Check if the raw message should be ignored."""
