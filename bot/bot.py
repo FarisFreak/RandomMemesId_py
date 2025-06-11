@@ -216,8 +216,7 @@ class BotClient(discord.Client):
         media_status = await self._get_media_status(message_id)
         if media_status and media_status['status'] != 'success':
             await self._delete_media_files(message_id)
-
-        await self._delete_message_from_db(message_id)
+            await self._delete_message_from_db(message_id)
 
     async def _get_media_status(self, message_id: int) -> dict:
         """Fetch media status from MongoDB."""
