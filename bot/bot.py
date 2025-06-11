@@ -5,6 +5,7 @@ import datetime
 import shutil
 import logging
 import asyncio
+import io
 from motor.motor_asyncio import AsyncIOMotorClient
 from utils import Media
 
@@ -77,6 +78,7 @@ class BotClient(discord.Client):
 
         db_entry = await self._process_attachments(message, media_type)
         await self._save_to_db_and_react(message, db_entry)
+        await self._log_queue(message)
 
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
         """Handle raw message delete events."""
@@ -198,7 +200,8 @@ class BotClient(discord.Client):
             "stop": stop,
             "error": errors,
             "reacted": False,
-            "updated_at": None
+            "updated_at": None,
+            "log_message_id": None
         }
 
     def _create_media_directory(self, message_id: int) -> str:
@@ -249,6 +252,67 @@ class BotClient(discord.Client):
             logging.info(f"Successfully deleted message ID {message_id} from MongoDB")
         else:
             logging.warning(f"Message ID {message_id} not found in MongoDB")
+
+    async def _log_queue(self, message: discord.Message):
+        """Log queue to log channel."""
+        # Check if log channel ID is configured
+        if not _bot_config.get('log_channel_id'):
+            logging.warning("Log channel ID is not configured. Skipping log.")
+            return
+
+        # Get the log channel
+        log_channel = self.get_channel(int(_bot_config['log_channel_id']))
+        if not log_channel:
+            logging.error(f"Log channel with ID {_bot_config['log_channel_id']} not found.")
+            return
+
+        logging.info(f"Logging submission from {message.author.name} (ID: {message.id}) to log channel")
+
+        try:
+            # Create an embed for the log
+            embed = discord.Embed(
+                title="New Submission",
+                description=f"Submission from {message.author.mention}",
+                color=0x00ff00,
+                timestamp=datetime.datetime.now()
+            )
+            embed.add_field(name="ID", value=message.id, inline=False)
+            embed.add_field(name="Author", value=message.author.mention, inline=False)
+            embed.add_field(name="Attachments", value=len(message.attachments), inline=False)
+            embed.set_footer(text=f"Message ID: {message.id}")
+
+            # Convert attachments to discord.File objects
+            files = []
+            for attachment in message.attachments:
+                file_data = await attachment.read()  # Read the attachment data
+                file = discord.File(
+                    fp=io.BytesIO(file_data),  # Wrap the data in a BytesIO object
+                    filename=attachment.filename
+                )
+                files.append(file)
+
+            # Send the embed and files to the log channel
+            _log_message = await log_channel.send(embed=embed, files=files)
+            await self._update_queue_log_chat(message.id, _log_message.id)
+            logging.info(f"Successfully logged submission (ID: {message.id}) to log channel")
+
+        except Exception as e:
+            logging.error(f"Failed to log submission (ID: {message.id}) to log channel: {e}")
+
+    async def _update_queue_log_chat(self, message_id: int, message_log_id: int):
+        """Update the log message ID in the database."""
+        try:
+            logging.info(f"Updating log message ID for submission (ID: {message_id})")
+            result = await _collections.find_one_and_update(
+                {"id": message_id},
+                {"$set": {"log_message_id": message_log_id}}
+            )
+            if result:
+                logging.info(f"Updated log message ID for submission (ID: {message_id})")
+            else:
+                logging.warning(f"No document found to update log message ID for submission (ID: {message_id})")
+        except Exception as e:
+            logging.error(f"Failed to update log chat message ID (ID: {message_id}): {e}")
 
     async def _update_queue(self):
         """Update for queue length."""
