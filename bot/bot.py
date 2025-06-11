@@ -61,10 +61,14 @@ class BotClient(discord.Client):
     async def on_message(self, message: discord.Message):
         """Handle incoming messages."""
         if self._should_ignore_message(message):
+            return
+        
+        logging.info(f"Processing message from {message.author.name} (ID: {message.id})")
+
+        if not message.attachments:
+            logging.info(f"Empty attachment {message.id}")
             await self._handle_invalid_message(message)
             return
-
-        logging.info(f"Processing message from {message.author.name} (ID: {message.id})")
 
         media_type = await self._validate_attachments(message)
         if not media_type:
@@ -97,7 +101,6 @@ class BotClient(discord.Client):
             message.author.bot or message.author.id == self.user.id,
             message.guild.id != _bot_config['guild_id'],
             message.channel.id != _bot_config['submit_channel_id'],
-            not message.attachments
         ]
         if any(conditions):
             logging.debug(f"Ignoring message ID {message.id} due to conditions")
