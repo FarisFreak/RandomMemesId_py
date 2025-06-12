@@ -279,18 +279,20 @@ class BotClient(discord.Client):
         logging.info(f"Logging submission from {message.author.name} (ID: {message.id}) to log channel")
 
         try:
+            _current_date = datetime.datetime.now()
             # Create an embed for the log
             embed = discord.Embed(
                 title="New Submission",
                 description=f"Submission from {message.author.mention}",
                 color=0x00ff00,
-                timestamp=datetime.datetime.now()
+                timestamp=_current_date
             )
             embed.add_field(name="ID", value=message.id, inline=False)
             embed.add_field(name="Author", value=message.author.mention, inline=False)
             embed.add_field(name="Attachments", value=len(message.attachments), inline=False)
             embed.add_field(name="Permalink", value=f"[Jump to Message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})", inline=False)
-            embed.set_footer(text=f"Message ID: {message.id}")
+            embed.add_field(name="Status", value="🕒 Pending", inline=False)
+            embed.set_footer(text=f"Last Update: {_current_date.strftime("%d-%m-%Y %H:%M:%S")}")
 
             # Convert attachments to discord.File objects
             files = []
@@ -361,24 +363,24 @@ class BotClient(discord.Client):
                 }
                 async for item in _collections.find(query):
                     logging.info(f"Detected change in document ID {item['_id']}: {item}")
-                    await self._react_poll_changes(message_id=item['id'], status=item['status'])
+                    await self._react_poll_changes(message_id=item['id'], status=item['status'], log_message_id=item['log_message_id'])
             except Exception as e:
                 logging.error(f"Error while polling status changes: {e}")
             await asyncio.sleep(5)
 
-    async def _react_poll_changes(self, message_id: int, status: str):
+    async def _react_poll_changes(self, message_id: int, status: str, log_message_id: int = None):
         """React to poll changes."""
-        # Determine the reaction based on the status
+        # Determine the reaction and status details
         reaction_map = {
-            'success': ('✅', "success"),
-            'failed': ('❌', "failed"),
-            'uploading': ('⌛', "uploading"),
-            'pending': ('🕒', "pending")
+            'success': ('✅', "success", "✅ Uploaded"),
+            'failed': ('❌', "failed", "❌ Failed to upload"),
+            'uploading': ('⌛', "uploading", "⌛ Uploading"),
+            'pending': ('🕒', "pending", "Queue pending")
         }
-        default_reaction = ('❔', "unknown")
+        default_reaction = ('❔', "unknown", "UNK")
 
         # Get the reaction and status description
-        reaction, status_desc = reaction_map.get(status, default_reaction)
+        reaction, status_desc, status_msg = reaction_map.get(status, default_reaction)
 
         if status in reaction_map:
             logging.info(f"Processing status '{status_desc}' for message ID {message_id}. Adding reaction: {reaction}")
@@ -386,29 +388,15 @@ class BotClient(discord.Client):
             logging.warning(f"Unknown status '{status}' for message ID {message_id}. Using default reaction: {reaction}")
 
         try:
-            # Fetch the message from the channel
-            channel = self.get_channel(_bot_config['submit_channel_id'])
-            _message = await channel.fetch_message(message_id)
-            logging.info(f"Fetched message ID {message_id} from channel {_bot_config['submit_channel_id']}")
-
-            # Remove previous reactions added by the bot
-            for emoji, _ in reaction_map.values():
-                try:
-                    await _message.remove_reaction(emoji, self.user)
-                    logging.debug(f"Removed previous reaction '{emoji}' from message ID {message_id}")
-                except discord.NotFound:
-                    logging.debug(f"No previous reaction '{emoji}' found for message ID {message_id}")
-
-            # Add the new reaction to the message
-            await _message.add_reaction(reaction)
-            logging.info(f"Added reaction '{reaction}' to message ID {message_id}")
+            # Fetch and process the main message
+            await self._fetch_and_process_main_message(message_id, reaction, reaction_map)
+            
+            # Process log reply if log_message_id is provided
+            if log_message_id and _bot_config.get('log_channel_id'):
+                await self._process_log_update(log_message_id, status_msg)
 
             # Update the database to mark 'reacted' as True
-            update_result = await _collections.update_one({"id": message_id}, {"$set": {"reacted": True}})
-            if update_result.modified_count > 0:
-                logging.info(f"Updated 'reacted' to True for message ID {message_id} in MongoDB")
-            else:
-                logging.warning(f"No updates made to 'reacted' for message ID {message_id} in MongoDB")
+            await self._update_database_reacted_flag(message_id)
 
         except discord.NotFound:
             logging.error(f"Message ID {message_id} not found in channel {_bot_config['submit_channel_id']}")
@@ -417,6 +405,112 @@ class BotClient(discord.Client):
         except Exception as e:
             logging.error(f"Unexpected error while processing poll changes for message ID {message_id}: {e}")
 
+    async def _fetch_and_process_main_message(self, message_id: int, reaction: str, reaction_map: dict):
+        """Fetch the main message, remove previous reactions, and add a new reaction."""
+        # Fetch the message from the channel
+        channel = self.get_channel(_bot_config['submit_channel_id'])
+        _message = await channel.fetch_message(message_id)
+        logging.info(f"Fetched message ID {message_id} from channel {_bot_config['submit_channel_id']}")
+
+        # Remove previous reactions added by the bot
+        for emoji, _, _ in reaction_map.values():
+            try:
+                await _message.remove_reaction(emoji, self.user)
+                logging.debug(f"Removed previous reaction '{emoji}' from message ID {message_id}")
+            except discord.NotFound:
+                logging.debug(f"No previous reaction '{emoji}' found for message ID {message_id}")
+
+        # Add the new reaction to the message
+        await _message.add_reaction(reaction)
+        logging.info(f"Added reaction '{reaction}' to message ID {message_id}")
+
+        return _message
+
+    async def _process_log_update(self, log_message_id: int, status_msg: str):
+        """Process the log reply by fetching the log message and replying to it."""
+        logging.info(f"Processing log reply for message ID {log_message_id} in log channel ID {_bot_config['log_channel_id']}")
+
+        try:
+            # Get the log channel
+            channel_log = self.get_channel(int(_bot_config['log_channel_id']))
+            if not channel_log:
+                logging.error(f"Log channel with ID {_bot_config['log_channel_id']} not found.")
+                return
+
+            logging.debug(f"Successfully fetched log channel ID {_bot_config['log_channel_id']}")
+
+            # Fetch the log message
+            _message_log = await channel_log.fetch_message(log_message_id)
+            logging.debug(f"Successfully fetched log message ID {log_message_id}")
+
+            # Reply to the log message
+            try:
+                _new_embeds = self._reconstruct_embed(_message_log, status_msg)
+                await _message_log.edit(embed=_new_embeds)
+                logging.info(f"Log message updated {log_message_id} with status: {status_msg}")
+                
+            except AttributeError:
+                # Fallback for older discord.py versions
+                await channel_log.send(f"{_message_log.author.mention} {status_msg}")
+                logging.info(f"Fallback reply sent to log message ID {log_message_id} with status: {status_msg}")
+
+        except discord.NotFound:
+            logging.error(f"Log message with ID {log_message_id} not found in channel {_bot_config['log_channel_id']}.")
+        except discord.Forbidden:
+            logging.error(f"Bot lacks permission to fetch messages in log channel {_bot_config['log_channel_id']}.")
+        except Exception as e:
+            logging.error(f"Unexpected error while processing log reply for message ID {log_message_id}: {e}")
+
+    async def _update_database_reacted_flag(self, message_id: int):
+        """Update the database to mark 'reacted' as True."""
+        update_result = await _collections.update_one({"id": message_id}, {"$set": {"reacted": True}})
+        if update_result.modified_count > 0:
+            logging.info(f"Updated 'reacted' to True for message ID {message_id} in MongoDB")
+        else:
+            logging.warning(f"No updates made to 'reacted' for message ID {message_id} in MongoDB")
+
+    def _reconstruct_embed(self, message: discord.Message, status: str = "UNK"):
+        """Reconstruct an embed from the message's existing embed."""
+        try:
+            # Check if the message contains any embeds
+            if not message.embeds:
+                logging.warning(f"No embeds found in message ID {message.id}")
+                return None
+
+            # Get the first embed (or iterate through all embeds if needed)
+            original_embed = message.embeds[0]
+
+            # Reconstruct the embed
+            reconstructed_embed = discord.Embed(
+                title=original_embed.title,
+                description=original_embed.description,
+                color=original_embed.color,
+                timestamp=original_embed.timestamp
+            )
+
+            # Add fields
+            for field in original_embed.fields:
+                if field.name == "Status" :
+                    reconstructed_embed.add_field(name="Status", value=status, inline=False)
+                else:
+                    reconstructed_embed.add_field(name=field.name, value=field.value, inline=field.inline)
+
+            # Add footer
+            if original_embed.footer and original_embed.footer.text:
+                _current_date = datetime.datetime.now()
+                reconstructed_embed.set_footer(text=f"Last Update: {_current_date.strftime("%d-%m-%Y %H:%M:%S")}")
+
+            # Add author (if exists)
+            if original_embed.author and original_embed.author.name:
+                reconstructed_embed.set_author(name=original_embed.author.name, icon_url=original_embed.author.icon_url)
+
+
+            logging.info(f"Successfully reconstructed embed from message ID {message.id}")
+            return reconstructed_embed
+
+        except Exception as e:
+            logging.error(f"Failed to reconstruct embed from message ID {message.id}: {e}")
+            return None
 
 
 # Initialize bot
