@@ -167,7 +167,8 @@ class WorkerClient:
                 "status": "failed", 
                 "stop": True, 
                 "error": [str(error)],
-                "updated_at": datetime.datetime.now()
+                "updated_at": datetime.datetime.now(),
+                "reacted": False
                 }
             }
         )
