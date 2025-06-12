@@ -289,6 +289,7 @@ class BotClient(discord.Client):
             embed.add_field(name="ID", value=message.id, inline=False)
             embed.add_field(name="Author", value=message.author.mention, inline=False)
             embed.add_field(name="Attachments", value=len(message.attachments), inline=False)
+            embed.add_field(name="Permalink", value=f"[Jump to Message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})", inline=False)
             embed.set_footer(text=f"Message ID: {message.id}")
 
             # Convert attachments to discord.File objects
