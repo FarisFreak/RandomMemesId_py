@@ -55,20 +55,38 @@ TIMESTAMP_FILE = "../config/initial_run_time.json"
 class WorkerClient:
     def __init__(self):
         logging.info("Initializing worker..")
-        self.client = Client()
+        self.client: Client = Client()
+
+        self.logged_in: bool = False
 
         _session_path = Path('session.json')
         if _session_path.exists():
             logging.info("Session found. Logging in with session.")
-            self.client.load_settings(_session_path)
+            _session = self.client.load_settings(_session_path)
+
+            if _session:
+                try:
+                    self.client.set_settings(_session)
+                    self.client.login(_worker_config['username'], _worker_config['password'])
+
+                    self.logged_in = True
+                    
+                except Exception as e:
+                    self.logged_in = False
+                    logging.info("Couldn't login user using session information: %s" % e)
         else:
             logging.info("Session not found. Logging in with username & password.")
             self.client.login(_worker_config['username'], _worker_config['password'])
             self.client.dump_settings(_session_path)
+            self.logged_in = True
 
-        self._caption = _worker_config['caption'] or '#fyp'
-
-        logging.info("Worker ready.")
+        if self.logged_in:
+            try:
+                self.client.get_timeline_feed()
+                self._caption = _worker_config['caption'] or '#fyp'
+            except Exception as e:
+                logging.error(f"Failed to init worker: {e}")
+                self.logged_in = False
 
     async def upload_media(self) -> bool:
         """Process and upload media from the queue."""
@@ -213,6 +231,12 @@ def save_initial_run_time(now: datetime.datetime, next_hour: datetime.datetime):
 
 async def main():
     worker = WorkerClient()
+
+    if worker.logged_in:
+        logging.info("Worker ready")
+    else:
+        logging.info("Worker failed to init")
+        exit(1)
 
     _run_timestamp = datetime.datetime.now()
     _delay_next_hour_timestamp = _delay_until_next_hour()
