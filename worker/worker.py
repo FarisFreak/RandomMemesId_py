@@ -147,7 +147,7 @@ class WorkerClient:
         """Convert a video using FFmpeg."""
         converted_path = f"{converted_path}.mp4"
         process = await asyncio.create_subprocess_exec(
-            'ffmpeg', '-i', str(original_path), converted_path,
+            'ffmpeg', '-y', '-i', str(original_path), converted_path,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
