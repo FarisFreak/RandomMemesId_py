@@ -1,3 +1,2 @@
-from .client import DiscordClient
-
-__all__ = ['DiscordClient']
+from .bot import bot
+from .utils import Media
