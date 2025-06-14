@@ -204,6 +204,7 @@ class BotClient(discord.Client):
                 "id": message.author.id,
                 "name": message.author.name
             },
+            "caption": message.content if len(message.content) > 0 else None,
             "attachments": attachments_metadata,
             "date": datetime.datetime.now(),
             "status": status,
@@ -289,6 +290,7 @@ class BotClient(discord.Client):
             )
             embed.add_field(name="ID", value=message.id, inline=False)
             embed.add_field(name="Author", value=message.author.mention, inline=False)
+            embed.add_field(name="Caption", value=message.content if len(message.content) > 0 else "-", inline=False)
             embed.add_field(name="Attachments", value=len(message.attachments), inline=False)
             embed.add_field(name="Permalink", value=f"[Jump to Message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})", inline=False)
             embed.add_field(name="Status", value="🕒 Pending", inline=False)

@@ -98,15 +98,20 @@ class WorkerClient:
             if not converted_medias:
                 raise ValueError(f"Unknown error {item['id']} (empty media)")
             
+            _caption_current = self._caption
+
+            if item['caption']:
+                _caption_current = f"{item['caption']}\r\n⠀\r\n════════════\r\n{self._caption}"
+                
             logging.info(f"Uploading queue {item['id']}..")
             await self._update_queue_status(item_id=item['id'], status="uploading")
             
             if len(converted_medias) > 1:
-                self.client.album_upload(converted_medias, self._caption)
+                self.client.album_upload(converted_medias, _caption_current)
             elif _media_type == 'PHOTO':
-                self.client.photo_upload(converted_medias[0], self._caption)
+                self.client.photo_upload(converted_medias[0], _caption_current)
             elif _media_type == 'VIDEO':
-                self.client.video_upload(converted_medias[0], self._caption)
+                self.client.video_upload(converted_medias[0], _caption_current)
 
             logging.info(f"Queue ID {item['id']} successfully processed.")
             await self._update_queue_status(item['id'], "success")
