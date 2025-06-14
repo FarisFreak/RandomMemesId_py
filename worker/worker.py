@@ -218,7 +218,7 @@ class WorkerClient:
 def _delay_until_next_hour() -> datetime.datetime:
     now = datetime.datetime.now()
     next_hour = (now + datetime.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
-    logging.info(f"First run at {next_hour}")
+    logging.info(f"First job will run at {next_hour}")
     return next_hour
 
 def save_initial_run_time(now: datetime.datetime, next_hour: datetime.datetime):
