@@ -500,7 +500,7 @@ class BotClient(discord.Client):
             # Add footer
             if original_embed.footer and original_embed.footer.text:
                 _current_date = datetime.datetime.now()
-                reconstructed_embed.set_footer(text=f"Last Update: {_current_date.strftime("%d-%m-%Y %H:%M:%S")}")
+                reconstructed_embed.set_footer(text=f"Last Update: {_current_date.strftime('%d-%m-%Y %H:%M:%S')}")
 
             # Add author (if exists)
             if original_embed.author and original_embed.author.name:
