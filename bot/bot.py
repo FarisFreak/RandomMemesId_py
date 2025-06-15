@@ -294,7 +294,7 @@ class BotClient(discord.Client):
             embed.add_field(name="Attachments", value=len(message.attachments), inline=False)
             embed.add_field(name="Permalink", value=f"[Jump to Message](https://discord.com/channels/{message.guild.id}/{message.channel.id}/{message.id})", inline=False)
             embed.add_field(name="Status", value="🕒 Pending", inline=False)
-            embed.set_footer(text=f"Last Update: {_current_date.strftime("%d-%m-%Y %H:%M:%S")}")
+            embed.set_footer(text=f"Last Update: {_current_date.strftime('%d-%m-%Y %H:%M:%S')}")
 
             # Convert attachments to discord.File objects
             files = []
