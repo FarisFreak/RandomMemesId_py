@@ -6,48 +6,29 @@ import shutil
 import logging
 import asyncio
 import io
-from motor.motor_asyncio import AsyncIOMotorClient
+import sys
+from pathlib import Path
 from utils import Media
 
-# Ensure the logs directory exists
-os.makedirs("../logs", exist_ok=True)
+root_path = Path(__file__).parent.parent
+sys.path.append(str(root_path))
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("../logs/bot.log", encoding="utf-8"),  # Save logs to a file
-        logging.StreamHandler()  # Print logs to console
-    ]
-)
-
-# Load configuration
 try:
-    with open('../config/config.json') as f:
-        config = json.load(f)
-        _bot_config = config['bot']
-        _db_config = config['mongodb']
+    from shared.logging import Logger
+    from shared.config import config
+    from shared.database import DatabaseManager
 
-        if not all([_bot_config.get('guild_id'), _bot_config.get('submit_channel_id'), _db_config.get('uri')]):
-            raise Exception("Missing required configuration values")
-        
+    Logger(filename="bot")
+    db = DatabaseManager(module_name="bot")
+    _bot_config = config.bot
+
+    if not all([_bot_config.get('guild_id'), _bot_config.get('submit_channel_id')]):
+        raise Exception("Missing required configuration values")
 except Exception as e:
-    logging.error(f"Failed lo load config: {e}")
-    exit(1)
-    
+    print(f"Init failed : {e}")
+    sys.exit(1)
 
-# MongoDB connection setup
-try:
-    mongodb_client = AsyncIOMotorClient(_db_config['uri'], serverSelectionTimeoutMS=5000)
-    _db = mongodb_client[_db_config['db_name']]
-    logging.info("Successfully connected to MongoDB")
-except Exception as e:
-    logging.error(f"Failed to connect to MongoDB: {e}")
-    exit(1)
-
-_collections = _db['queue']
-
+_collections = db.queue_collection
 
 class BotClient(discord.Client):
     def __init__(self, *, intents: discord.Intents, **kwargs):
