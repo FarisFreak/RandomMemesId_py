@@ -12,43 +12,26 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-# Ensure the logs directory exists
-os.makedirs("../logs", exist_ok=True)
+root_path = Path(__file__).parent.parent
+sys.path.append(str(root_path))
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("../logs/worker.log", encoding="utf-8"),  # Save logs to a file
-        logging.StreamHandler()  # Print logs to console
-    ]
-)
-
-# Load configuration
 try:
-    with open('../config/config.json') as f:
-        config = json.load(f)
-        _worker_config = config['worker']
-        _db_config = config['mongodb']
+    from shared.logging import Logger
+    from shared.config import config
+    from shared.database import DatabaseManager
 
-        if not all([_worker_config.get('username'), _worker_config.get('password'), _db_config.get('uri')]):
-            raise Exception("Missing required configuration values")
+    Logger(filename="worker")
+    _worker_config = config.worker
 
+    if not all([_worker_config.get('username'), _worker_config.get('password')]):
+        raise Exception("Missing required configuration values")
+    
+    db = DatabaseManager(module_name="worker")
 except Exception as e:
-    logging.error(f"Failed to load config: {e}")
-    exit(1)
+    print(f"Init failed : {e}")
+    sys.exit(1)
 
-# MongoDB connection setup
-try:
-    mongodb_client = AsyncIOMotorClient(_db_config['uri'], serverSelectionTimeoutMS=5000)
-    _db = mongodb_client[_db_config['db_name']]
-    logging.info("Successfully connected to MongoDB")
-except Exception as e:
-    logging.error(f"Failed to connect to MongoDB: {e}")
-    exit(1)
-
-_collections = _db['queue']
+_collections = db.queue_collection
 
 TIMESTAMP_FILE = "../config/initial_run_time.json"
 
