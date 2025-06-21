@@ -4,6 +4,7 @@ import logging
 import asyncio
 import shutil
 import datetime
+import sys
 from PIL import Image
 from io import BytesIO
 from pathlib import Path
