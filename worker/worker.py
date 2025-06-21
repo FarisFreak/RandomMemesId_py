@@ -40,7 +40,7 @@ class WorkerClient:
     def __init__(self):
         logging.info("Initializing worker..")
         self.client: Client = Client()
-
+        self.client.delay_range = [3,10]
         self.logged_in: bool = False
 
         _session_path = Path('session.json')
